@@ -1,0 +1,116 @@
+---
+- name: Install Jenkins
+  hosts: all
+  gather_facts: false
+  vars:
+    email: jonathan@cybir.co  # TODO: Move this
+    java_packages:
+      - openjdk-8-jdk
+    jenkins_admin_username: admin
+    jenkins_admin_password: admin
+    jenkins_plugins:
+      - ant
+      - antisamy-markup-formatter
+      - build-pipeline-plugin
+      - build-timeout
+      - cloudbees-folder
+      - credentials-binding
+      - email-ext
+      - git
+      - github-organization-folder
+      - gradle
+      - ldap
+      - mailer
+      - matrix-auth
+      - pam-auth
+      - pipeline-stage-view
+      - ssh-slaves
+      - subversion
+      - timestamper
+      - workflow-aggregator
+      - ws-cleanup
+
+  pre_tasks:
+    - name: install python
+      raw: bash -c "test -e /usr/bin/python || (apt -qqy update && apt install -qqy python-minimal)"
+      register: output
+      changed_when: output.stdout != ""
+
+    - name: gathering facts
+      setup:
+
+  tasks:
+    - name: install packages
+      package: name="{{ item }}" state=present
+      with_items:
+        - nginx
+        - python-pip
+
+    - name: install pip packages
+      pip:
+        name: ["python-jenkins", "lxml"]
+
+    - include_role: name=geerlingguy.jenkins
+
+    - name: disable setup
+      replace:
+        path: /var/lib/jenkins/config.xml
+        regexp: '^(\s+)<installStateName>NEW</installStateName>$'
+        replace: '\1<installStateName>RUNNING</installStateName>'
+      notify: restart jenkins
+    
+    - name: set jenkins url
+      template:
+        src: ../conf/jenkins.model.JenkinsLocationConfiguration.xml
+        dest: /var/lib/jenkins/jenkins.model.JenkinsLocationConfiguration.xml
+        owner: jenkins
+        group: jenkins
+        mode: 0600
+      notify: restart jenkins
+
+    - name: create jobs
+      jenkins_job:
+        name: "{{ item | basename | splitext | first }}"
+        password: "{{ jenkins_admin_password }}"
+        user: admin
+        config: "{{ lookup('file', item) }}"
+      with_fileglob: ../conf/jobs/*.xml
+
+    - name: nginx config
+      register: nginx_config
+      template:
+        src: ../conf/nginx.conf
+        dest: /etc/nginx/sites-enabled/jenkins
+      notify: restart nginx
+
+    - name: make ssl directory
+      file:
+        dest: /etc/nginx/ssl
+        owner: root
+        group: root
+        state: directory
+
+    - name: copy ssl private key
+      copy:
+        src: ../conf/certs/private.pem
+        dest: /etc/nginx/ssl/server.key
+        owner: root
+        group: root
+        mode: 0600
+      notify: restart nginx
+
+    - name: copy ssl certificate
+      copy:
+        src: ../conf/certs/certificate.pem
+        dest: /etc/nginx/ssl/server.crt
+        owner: root
+        group: root
+        mode: 0600
+      notify: restart nginx
+    
+  handlers:
+    - name: restart nginx
+      service: name=nginx state=restarted
+
+    - name: restart jenkins
+      service: name=jenkins state=restarted

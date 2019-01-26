@@ -1,0 +1,17 @@
+---
+- name: Install Jenkins
+  hosts: all
+  tasks:
+    - name: find files
+      find:
+        paths: /var/lib/jenkins/jobs/
+        patterns: config.xml
+        recurse: yes
+      register: test
+
+    - name: syncing files
+      fetch:
+        src: "/var/lib/jenkins/jobs/{{ item.path.split('/')[-2] }}/config.xml"
+        dest: "../conf/jobs/{{ item.path.split('/')[-2] }}.xml"
+        flat: true
+      with_items: "{{ test.files }}"
