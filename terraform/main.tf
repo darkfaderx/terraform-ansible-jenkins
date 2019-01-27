@@ -1,9 +1,9 @@
 resource "digitalocean_droplet" "_" {
   image    = "ubuntu-18-04-x64"
-  name     = "jenkins"
-  region   = "ams3"
-  size     = "s-1vcpu-1gb"
-  backups  = true
+  name     = "${var.droplet_name}"
+  region   = "${var.droplet_region}"
+  size     = "${var.droplet_size}"
+  backups  = "${var.droplet_backups}"
   ssh_keys = ["${digitalocean_ssh_key._.id}"]
 }
 
@@ -15,6 +15,6 @@ resource "digitalocean_record" "_" {
   domain = "${data.digitalocean_domain._.name}"
   name   = "${var.subdomain}"
   type   = "A"
-  ttl    = 10
+  ttl    = 300
   value  = "${digitalocean_droplet._.ipv4_address}"
 }
